@@ -1,32 +1,35 @@
-#version 120
+#version 330 core
 
 /*
-	 Phosphor shader - Copyright (C) 2011 caligari.
+    Phosphor shader - Copyright (C) 2011 caligari.
 
-	 Ported by Hyllian.
+    Ported by Hyllian.
 
-        This file ported from Libretro's GLSL shader crt-caligari.glslp 
-        to DOSBox-compatible format by Tyrells.
+    This file ported from Libretro's GLSL shader crt-caligari.glslp
+    to DOSBox-compatible format by Tyrells, updated for version 0.83
+    by Farsil.
 
-	This program is free software; you can redistribute it and/or
-	modify it under the terms of the GNU General Public License
-	as published by the Free Software Foundation; either version 2
-	of the License, or (at your option) any later version.
+    This program is free software; you can redistribute it and/or
+    modify it under the terms of the GNU General Public License
+    as published by the Free Software Foundation; either version 2
+    of the License, or (at your option) any later version.
 
-	This program is distributed in the hope that it will be useful,
-	but WITHOUT ANY WARRANTY; without even the implied warranty of
-	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-	GNU General Public License for more details.
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
 
-	You should have received a copy of the GNU General Public License
-	along with this program; if not, write to the Free Software
-	Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
-
-
-
+    You should have received a copy of the GNU General Public License
+    along with this program; if not, write to the Free Software
+    Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 */
 
 /*
+
+#pragma name        Main_Pass1
+#pragma output_size Viewport
+
+#pragma linear_filtering off
 
 // Parameter lines go here:
 // 0.5 = the spot stays inside the original pixel
@@ -43,174 +46,113 @@
 
 #if defined(VERTEX)
 
-#if __VERSION__ >= 130
-#define COMPAT_VARYING out
-#define COMPAT_ATTRIBUTE in
-#define COMPAT_TEXTURE texture
-#else
-#define COMPAT_VARYING varying
-#define COMPAT_ATTRIBUTE attribute
-#define COMPAT_TEXTURE texture2D
-#endif
+uniform vec2 INPUT_SIZE_0;
 
-#ifdef GL_ES
-#define COMPAT_PRECISION mediump
-#else
-#define COMPAT_PRECISION
-#endif
+layout (location = 0) in vec2 a_position;
 
-COMPAT_ATTRIBUTE vec4 a_position;
-COMPAT_ATTRIBUTE vec4 TexCoord;
-COMPAT_VARYING vec2 v_texCoord;
-COMPAT_VARYING vec2 onex;
-COMPAT_VARYING vec2 oney;
-
-vec4 _oPosition1;
-uniform mat4 MVPMatrix;
-uniform COMPAT_PRECISION int FrameDirection;
-uniform COMPAT_PRECISION int rubyFrameCount;
-uniform COMPAT_PRECISION vec2 rubyOutputSize;
-uniform COMPAT_PRECISION vec2 rubyTextureSize;
-uniform COMPAT_PRECISION vec2 rubyInputSize;
-
-#define SourceSize vec4(rubyTextureSize, 1.0 / rubyTextureSize) //either rubyTextureSize or rubyInputSize
+out vec2 v_texCoord;
+out vec2 onex;
+out vec2 oney;
 
 void main()
 {
-	gl_Position = a_position;
-	v_texCoord = vec2(a_position.x + 1.0, 1.0 - a_position.y) / 2.0 * rubyInputSize / rubyTextureSize;
+    gl_Position = vec4(a_position, 0.0, 1.0);
+    v_texCoord = vec2(a_position.x + 1.0, a_position.y + 1.0) / 2.0;
 
-	onex = vec2(SourceSize.z, 0.0);
-	oney = vec2(0.0, SourceSize.w);
+    onex = vec2(1.0 / INPUT_SIZE_0.x, 0.0);
+    oney = vec2(0.0, 1.0 / INPUT_SIZE_0.y);
 }
 
 #elif defined(FRAGMENT)
 
-#if __VERSION__ >= 130
-#define COMPAT_VARYING in
-#define COMPAT_TEXTURE texture
+in vec2 v_texCoord;
+in vec2 onex;
+in vec2 oney;
+
 out vec4 FragColor;
-#else
-#define COMPAT_VARYING varying
-#define FragColor gl_FragColor
-#define COMPAT_TEXTURE texture2D
-#endif
 
-#ifdef GL_ES
-#ifdef GL_FRAGMENT_PRECISION_HIGH
-precision highp float;
-#else
-precision mediump float;
-#endif
-#define COMPAT_PRECISION mediump
-#else
-#define COMPAT_PRECISION
-#endif
+uniform vec2 INPUT_SIZE_0;
+uniform sampler2D INPUT_TEXTURE_0;
 
-uniform COMPAT_PRECISION int FrameDirection;
-uniform COMPAT_PRECISION int rubyFrameCount;
-uniform COMPAT_PRECISION vec2 rubyOutputSize;
-uniform COMPAT_PRECISION vec2 rubyTextureSize;
-uniform COMPAT_PRECISION vec2 rubyInputSize;
-uniform sampler2D rubyTexture;
-COMPAT_VARYING vec2 v_texCoord;
-COMPAT_VARYING vec2 onex;
-COMPAT_VARYING vec2 oney;
+uniform float SPOT_WIDTH;
+uniform float SPOT_HEIGHT;
+uniform float COLOR_BOOST;
+uniform float InputGamma;
+uniform float OutputGamma;
 
-// compatibility #defines
-#define Source rubyTexture
-#define vTexCoord v_texCoord.xy
+#define GAMMA_IN(color)  pow(color, vec4(InputGamma))
+#define GAMMA_OUT(color) pow(color, vec4(1.0 / OutputGamma))
 
-#define SourceSize vec4(rubyTextureSize, 1.0 / rubyTextureSize) //either rubyTextureSize or rubyInputSize
-#define rubyOutputSize vec4(rubyOutputSize, 1.0 / rubyOutputSize)
-
-#ifdef PARAMETER_UNIFORM
-// All parameter floats need to have COMPAT_PRECISION in front of them
-uniform COMPAT_PRECISION float SPOT_WIDTH;
-uniform COMPAT_PRECISION float SPOT_HEIGHT;
-uniform COMPAT_PRECISION float COLOR_BOOST;
-uniform COMPAT_PRECISION float InputGamma;
-uniform COMPAT_PRECISION float OutputGamma;
-#else
-#define SPOT_WIDTH 0.9
-#define SPOT_HEIGHT 0.65
-#define COLOR_BOOST 1.45
-#define InputGamma 2.4
-#define OutputGamma 2.2
-#endif
-
-#define GAMMA_IN(color)     pow(color,vec4(InputGamma))
-#define GAMMA_OUT(color)    pow(color, vec4(1.0 / OutputGamma))
-
-#define TEX2D(coords)	GAMMA_IN( COMPAT_TEXTURE(Source, coords) )
+#define TEX2D(coords) GAMMA_IN(texture(INPUT_TEXTURE_0, coords))
 
 // Macro for weights computing
 #define WEIGHT(w) \
-	if(w>1.0) w=1.0; \
-w = 1.0 - w * w; \
-w = w * w;
+    if (w > 1.0) w = 1.0; \
+    w = 1.0 - w * w; \
+    w = w * w;
 
 void main()
 {
-	vec2 coords = ( vTexCoord * SourceSize.xy );
-	vec2 pixel_center = floor( coords ) + vec2(0.5, 0.5);
-	vec2 texture_coords = pixel_center * SourceSize.zw;
+    vec2 coords = v_texCoord * INPUT_SIZE_0;
+    vec2 pixel_center = floor(coords) + vec2(0.5, 0.5);
+    vec2 texture_coords = pixel_center / INPUT_SIZE_0;
 
-	vec4 color = TEX2D( texture_coords );
+    vec4 color = TEX2D(texture_coords);
 
-	float dx = coords.x - pixel_center.x;
+    float dx = coords.x - pixel_center.x;
 
-	float h_weight_00 = dx / SPOT_WIDTH;
-	WEIGHT( h_weight_00 );
+    float h_weight_00 = dx / SPOT_WIDTH;
+    WEIGHT(h_weight_00);
 
-	color *= vec4( h_weight_00, h_weight_00, h_weight_00, h_weight_00  );
+    color *= vec4(h_weight_00);
 
-	// get closest horizontal neighbour to blend
-	vec2 coords01;
-	if (dx>0.0) {
-		coords01 = onex;
-		dx = 1.0 - dx;
-	} else {
-		coords01 = -onex;
-		dx = 1.0 + dx;
-	}
-	vec4 colorNB = TEX2D( texture_coords + coords01 );
+    // get closest horizontal neighbour to blend
+    vec2 coords01;
+    if (dx > 0.0) {
+        coords01 = onex;
+        dx = 1.0 - dx;
+    } else {
+        coords01 = -onex;
+        dx = 1.0 + dx;
+    }
+    vec4 colorNB = TEX2D(texture_coords + coords01);
 
-	float h_weight_01 = dx / SPOT_WIDTH;
-	WEIGHT( h_weight_01 );
+    float h_weight_01 = dx / SPOT_WIDTH;
+    WEIGHT(h_weight_01);
 
-	color = color + colorNB * vec4( h_weight_01 );
+    color = color + colorNB * vec4(h_weight_01);
 
-	//////////////////////////////////////////////////////
-	// Vertical Blending
-	float dy = coords.y - pixel_center.y;
-	float v_weight_00 = dy / SPOT_HEIGHT;
-	WEIGHT( v_weight_00 );
-	color *= vec4( v_weight_00 );
+    //////////////////////////////////////////////////////
+    // Vertical Blending
+    float dy = coords.y - pixel_center.y;
+    float v_weight_00 = dy / SPOT_HEIGHT;
+    WEIGHT(v_weight_00);
+    color *= vec4(v_weight_00);
 
-	// get closest vertical neighbour to blend
-	vec2 coords10;
-	if (dy>0.0) {
-		coords10 = oney;
-		dy = 1.0 - dy;
-	} else {
-		coords10 = -oney;
-		dy = 1.0 + dy;
-	}
-	colorNB = TEX2D( texture_coords + coords10 );
+    // get closest vertical neighbour to blend
+    vec2 coords10;
+    if (dy > 0.0) {
+        coords10 = oney;
+        dy = 1.0 - dy;
+    } else {
+        coords10 = -oney;
+        dy = 1.0 + dy;
+    }
+    colorNB = TEX2D(texture_coords + coords10);
 
-	float v_weight_10 = dy / SPOT_HEIGHT;
-	WEIGHT( v_weight_10 );
+    float v_weight_10 = dy / SPOT_HEIGHT;
+    WEIGHT(v_weight_10);
 
-	color = color + colorNB * vec4( v_weight_10 * h_weight_00, v_weight_10 * h_weight_00, v_weight_10 * h_weight_00, v_weight_10 * h_weight_00 );
+    color = color + colorNB * vec4(v_weight_10 * h_weight_00);
 
-	colorNB = TEX2D(  texture_coords + coords01 + coords10 );
+    colorNB = TEX2D(texture_coords + coords01 + coords10);
 
-	color = color + colorNB * vec4( v_weight_10 * h_weight_01, v_weight_10 * h_weight_01, v_weight_10 * h_weight_01, v_weight_10 * h_weight_01 );
+    color = color + colorNB * vec4(v_weight_10 * h_weight_01);
 
-	color *= vec4( COLOR_BOOST );
+    color *= vec4(COLOR_BOOST);
 
-	FragColor = clamp( GAMMA_OUT(color), 0.0, 1.0 );
-	FragColor.a = 1.0;
+    FragColor = clamp(GAMMA_OUT(color), 0.0, 1.0);
+    FragColor.a = 1.0;
 }
+
 #endif
