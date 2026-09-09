@@ -1,7 +1,4 @@
-#version 120
-
-#pragma use_srgb_texture
-#pragma use_srgb_framebuffer
+#version 330 core
 
 // PUBLIC DOMAIN CRT STYLED SCAN-LINE SHADER
 //
@@ -16,20 +13,30 @@
 // It is an example what I personally would want as a display option for pixel art games.
 // Please take and use, change, or whatever.
 
-// This file ported from Libretro's GLSL shader crt-lottes.glslp 
-// to DOSBox-compatible format by Tyrells.
+// This file ported from Libretro's GLSL shader crt-lottes.glslp
+// to DOSBox-compatible format by Tyrells, updated for version 0.83
+// by Farsil.
+//
+// The libretro 'use_srgb_texture' and 'use_srgb_framebuffer' pragmas have been
+// dropped; they are rejected by 0.83. In their place, we apply the linear <-> 
+// gamma conversion in the shader code.
 
 /*
 
+#pragma name        Main_Pass1
+#pragma output_size Viewport
+
+#pragma linear_filtering off
+
 // Parameter lines go here:
-#pragma parameter hardScan "hardScan" -8.0 -20.0 0.0 1.0
-#pragma parameter hardPix "hardPix" -3.0 -20.0 0.0 1.0
-#pragma parameter warpX "warpX" 0.031 0.0 0.125 0.01
-#pragma parameter warpY "warpY" 0.041 0.0 0.125 0.01
+#pragma parameter hardScan "hardScan" -7.0 -20.0 0.0 1.0
+#pragma parameter hardPix "hardPix" -3.5 -20.0 0.0 1.0
+#pragma parameter warpX "warpX" 0.0075 0.0 0.125 0.01
+#pragma parameter warpY "warpY" 0.0075 0.0 0.125 0.01
 #pragma parameter maskDark "maskDark" 0.5 0.0 2.0 0.1
 #pragma parameter maskLight "maskLight" 1.5 0.0 2.0 0.1
-#pragma parameter shadowMask "shadowMask" 3.0 0.0 4.0 1.0
-#pragma parameter brightBoost "brightness boost" 1.0 0.0 2.0 0.05
+#pragma parameter shadowMask "shadowMask" 1.0 0.0 4.0 1.0
+#pragma parameter brightBoost "brightness boost" 1.4 0.0 2.0 0.05
 #pragma parameter hardBloomPix "bloom-x soft" -1.5 -2.0 -0.5 0.1
 #pragma parameter hardBloomScan "bloom-y soft" -2.0 -4.0 -1.0 0.1
 #pragma parameter bloomAmount "bloom ammount" 0.15 0.0 1.0 0.05
@@ -39,329 +46,259 @@
 
 #if defined(VERTEX)
 
-#if __VERSION__ >= 130
-#define COMPAT_VARYING out
-#define COMPAT_ATTRIBUTE in
-#define COMPAT_TEXTURE texture
-#else
-#define COMPAT_VARYING varying
-#define COMPAT_ATTRIBUTE attribute
-#define COMPAT_TEXTURE texture2D
-#endif
+layout (location = 0) in vec2 a_position;
 
-#ifdef GL_ES
-#define COMPAT_PRECISION mediump
-#else
-#define COMPAT_PRECISION
-#endif
-
-COMPAT_ATTRIBUTE vec4 VertexCoord;
-COMPAT_ATTRIBUTE vec4 COLOR;
-COMPAT_ATTRIBUTE vec4 TexCoord;
-COMPAT_VARYING vec4 COL0;
-COMPAT_VARYING vec4 TEX0;
-
-uniform COMPAT_PRECISION vec2 rubyTextureSize;
-uniform COMPAT_PRECISION vec2 rubyInputSize;
-
-COMPAT_ATTRIBUTE vec4 a_position;
-COMPAT_VARYING vec2 v_texCoord;
+out vec2 v_texCoord;
 
 void main()
 {
-	gl_Position = a_position;
-	v_texCoord = vec2(a_position.x+1.0,1.0-a_position.y)/2.0*rubyInputSize/rubyTextureSize;
+    gl_Position = vec4(a_position, 0.0, 1.0);
+    v_texCoord = vec2(a_position.x + 1.0, a_position.y + 1.0) / 2.0;
 }
 
 #elif defined(FRAGMENT)
 
-#if __VERSION__ >= 130
-#define COMPAT_VARYING in
-#define COMPAT_TEXTURE texture
+in vec2 v_texCoord;
+
 out vec4 FragColor;
-#else
-#define COMPAT_VARYING varying
-#define FragColor gl_FragColor
-#define COMPAT_TEXTURE texture2D
-#endif
 
-#ifdef GL_ES
-#ifdef GL_FRAGMENT_PRECISION_HIGH
-precision highp float;
-#else
-precision mediump float;
-#endif
-#define COMPAT_PRECISION mediump
-#else
-#define COMPAT_PRECISION
-#endif
+uniform vec2 INPUT_SIZE_0;
+uniform sampler2D INPUT_TEXTURE_0;
 
-uniform COMPAT_PRECISION vec2 rubyTextureSize;
-uniform COMPAT_PRECISION vec2 rubyInputSize;
-uniform COMPAT_PRECISION vec2 rubyOutputSize;
+uniform float hardScan;
+uniform float hardPix;
+uniform float warpX;
+uniform float warpY;
+uniform float maskDark;
+uniform float maskLight;
+uniform float shadowMask;
+uniform float brightBoost;
+uniform float hardBloomPix;
+uniform float hardBloomScan;
+uniform float bloomAmount;
+uniform float shape;
 
-uniform COMPAT_PRECISION sampler2D rubyTexture;
-COMPAT_VARYING vec2 v_texCoord;
-
-// fragment compatibility #defines
-#define Source rubyTexture
-#define vTexCoord v_texCoord.xy
-
-#define SourceSize vec4(rubyTextureSize, 1.0 / rubyTextureSize) //either TextureSize or InputSize
-#define outsize vec4(rubyOutputSize, 1.0 / rubyOutputSize)
-
-#ifdef PARAMETER_UNIFORM
-// All parameter floats need to have COMPAT_PRECISION in front of them
-uniform COMPAT_PRECISION float hardScan;
-uniform COMPAT_PRECISION float hardPix;
-uniform COMPAT_PRECISION float warpX;
-uniform COMPAT_PRECISION float warpY;
-uniform COMPAT_PRECISION float maskDark;
-uniform COMPAT_PRECISION float maskLight;
-uniform COMPAT_PRECISION float shadowMask;
-uniform COMPAT_PRECISION float brightBoost;
-uniform COMPAT_PRECISION float hardBloomPix;
-uniform COMPAT_PRECISION float hardBloomScan;
-uniform COMPAT_PRECISION float bloomAmount;
-uniform COMPAT_PRECISION float shape;
-#else
-#define hardScan -7.0   //tweaked
-#define hardPix -3.5    //tweaked
-#define warpX 0.0075    //tweaked
-#define warpY 0.0075    //tweaked
-#define maskDark 0.5
-#define maskLight 1.5
-#define shadowMask 1.0
-#define brightBoost 1.4 //tweaked
-#define hardBloomPix -1.5
-#define hardBloomScan -2.0
-#define bloomAmount 0.15
-#define shape 2.0
-#endif
-
+//Uncomment to reduce instructions with simpler linearization
+//(fixes HD3000 Sandy Bridge IGP)
 #define DO_BLOOM
 
 // Nearest emulated sample given floating point position and texel offset.
 // Also zero's off screen.
 vec3 Fetch(vec2 pos,vec2 off){
-  pos=(floor(pos*SourceSize.xy+off)+vec2(0.5,0.5))/SourceSize.xy;
-  return brightBoost * COMPAT_TEXTURE(Source,pos.xy).rgb;
+    pos=(floor(pos*INPUT_SIZE_0+off)+vec2(0.5,0.5))/INPUT_SIZE_0;
+    // sRGB => linear; see the note at the top of the file
+    return brightBoost * pow(texture(INPUT_TEXTURE_0,pos.xy).rgb, vec3(2.2));
 }
 
 // Distance in emulated pixels to nearest texel.
 vec2 Dist(vec2 pos)
 {
-	pos = pos*SourceSize.xy;
+    pos = pos*INPUT_SIZE_0;
 
-	return -((pos - floor(pos)) - vec2(0.5));
+    return -((pos - floor(pos)) - vec2(0.5));
 }
 
 // 1D Gaussian.
 float Gaus(float pos, float scale)
 {
-	return exp2(scale*pow(abs(pos), shape));
+    return exp2(scale*pow(abs(pos), shape));
 }
 
 // 3-tap Gaussian filter along horz line.
 vec3 Horz3(vec2 pos, float off)
 {
-	vec3 b    = Fetch(pos, vec2(-1.0, off));
-	vec3 c    = Fetch(pos, vec2( 0.0, off));
-	vec3 d    = Fetch(pos, vec2( 1.0, off));
-	float dst = Dist(pos).x;
+    vec3 b    = Fetch(pos, vec2(-1.0, off));
+    vec3 c    = Fetch(pos, vec2( 0.0, off));
+    vec3 d    = Fetch(pos, vec2( 1.0, off));
+    float dst = Dist(pos).x;
 
-	// Convert distance to weight.
-	float scale = hardPix;
-	float wb = Gaus(dst-1.0,scale);
-	float wc = Gaus(dst+0.0,scale);
-	float wd = Gaus(dst+1.0,scale);
+    // Convert distance to weight.
+    float scale = hardPix;
+    float wb = Gaus(dst-1.0,scale);
+    float wc = Gaus(dst+0.0,scale);
+    float wd = Gaus(dst+1.0,scale);
 
-	// Return filtered sample.
-	return (b*wb+c*wc+d*wd)/(wb+wc+wd);
+    // Return filtered sample.
+    return (b*wb+c*wc+d*wd)/(wb+wc+wd);
 }
 
 // 5-tap Gaussian filter along horz line.
 vec3 Horz5(vec2 pos,float off){
-	vec3 a = Fetch(pos,vec2(-2.0, off));
-	vec3 b = Fetch(pos,vec2(-1.0, off));
-	vec3 c = Fetch(pos,vec2( 0.0, off));
-	vec3 d = Fetch(pos,vec2( 1.0, off));
-	vec3 e = Fetch(pos,vec2( 2.0, off));
+    vec3 a = Fetch(pos,vec2(-2.0, off));
+    vec3 b = Fetch(pos,vec2(-1.0, off));
+    vec3 c = Fetch(pos,vec2( 0.0, off));
+    vec3 d = Fetch(pos,vec2( 1.0, off));
+    vec3 e = Fetch(pos,vec2( 2.0, off));
 
-	float dst = Dist(pos).x;
-	// Convert distance to weight.
-	float scale = hardPix;
-	float wa = Gaus(dst - 2.0, scale);
-	float wb = Gaus(dst - 1.0, scale);
-	float wc = Gaus(dst + 0.0, scale);
-	float wd = Gaus(dst + 1.0, scale);
-	float we = Gaus(dst + 2.0, scale);
+    float dst = Dist(pos).x;
+    // Convert distance to weight.
+    float scale = hardPix;
+    float wa = Gaus(dst - 2.0, scale);
+    float wb = Gaus(dst - 1.0, scale);
+    float wc = Gaus(dst + 0.0, scale);
+    float wd = Gaus(dst + 1.0, scale);
+    float we = Gaus(dst + 2.0, scale);
 
-	// Return filtered sample.
-	return (a*wa+b*wb+c*wc+d*wd+e*we)/(wa+wb+wc+wd+we);
+    // Return filtered sample.
+    return (a*wa+b*wb+c*wc+d*wd+e*we)/(wa+wb+wc+wd+we);
 }
 
 // 7-tap Gaussian filter along horz line.
 vec3 Horz7(vec2 pos,float off)
 {
-	vec3 a = Fetch(pos, vec2(-3.0, off));
-	vec3 b = Fetch(pos, vec2(-2.0, off));
-	vec3 c = Fetch(pos, vec2(-1.0, off));
-	vec3 d = Fetch(pos, vec2( 0.0, off));
-	vec3 e = Fetch(pos, vec2( 1.0, off));
-	vec3 f = Fetch(pos, vec2( 2.0, off));
-	vec3 g = Fetch(pos, vec2( 3.0, off));
+    vec3 a = Fetch(pos, vec2(-3.0, off));
+    vec3 b = Fetch(pos, vec2(-2.0, off));
+    vec3 c = Fetch(pos, vec2(-1.0, off));
+    vec3 d = Fetch(pos, vec2( 0.0, off));
+    vec3 e = Fetch(pos, vec2( 1.0, off));
+    vec3 f = Fetch(pos, vec2( 2.0, off));
+    vec3 g = Fetch(pos, vec2( 3.0, off));
 
-	float dst = Dist(pos).x;
-	// Convert distance to weight.
-	float scale = hardBloomPix;
-	float wa = Gaus(dst - 3.0, scale);
-	float wb = Gaus(dst - 2.0, scale);
-	float wc = Gaus(dst - 1.0, scale);
-	float wd = Gaus(dst + 0.0, scale);
-	float we = Gaus(dst + 1.0, scale);
-	float wf = Gaus(dst + 2.0, scale);
-	float wg = Gaus(dst + 3.0, scale);
+    float dst = Dist(pos).x;
+    // Convert distance to weight.
+    float scale = hardBloomPix;
+    float wa = Gaus(dst - 3.0, scale);
+    float wb = Gaus(dst - 2.0, scale);
+    float wc = Gaus(dst - 1.0, scale);
+    float wd = Gaus(dst + 0.0, scale);
+    float we = Gaus(dst + 1.0, scale);
+    float wf = Gaus(dst + 2.0, scale);
+    float wg = Gaus(dst + 3.0, scale);
 
-	// Return filtered sample.
-	return (a*wa+b*wb+c*wc+d*wd+e*we+f*wf+g*wg)/(wa+wb+wc+wd+we+wf+wg);
+    // Return filtered sample.
+    return (a*wa+b*wb+c*wc+d*wd+e*we+f*wf+g*wg)/(wa+wb+wc+wd+we+wf+wg);
 }
 
 // Return scanline weight.
 float Scan(vec2 pos, float off)
 {
-	float dst = Dist(pos).y;
+    float dst = Dist(pos).y;
 
-	return Gaus(dst + off, hardScan);
+    return Gaus(dst + off, hardScan);
 }
 
 // Return scanline weight for bloom.
 float BloomScan(vec2 pos, float off)
 {
-	float dst = Dist(pos).y;
+    float dst = Dist(pos).y;
 
-	return Gaus(dst + off, hardBloomScan);
+    return Gaus(dst + off, hardBloomScan);
 }
 
 // Allow nearest three lines to effect pixel.
 vec3 Tri(vec2 pos)
 {
-	vec3 a = Horz3(pos,-1.0);
-	vec3 b = Horz5(pos, 0.0);
-	vec3 c = Horz3(pos, 1.0);
+    vec3 a = Horz3(pos,-1.0);
+    vec3 b = Horz5(pos, 0.0);
+    vec3 c = Horz3(pos, 1.0);
 
-	float wa = Scan(pos,-1.0);
-	float wb = Scan(pos, 0.0);
-	float wc = Scan(pos, 1.0);
+    float wa = Scan(pos,-1.0);
+    float wb = Scan(pos, 0.0);
+    float wc = Scan(pos, 1.0);
 
-	return a*wa + b*wb + c*wc;
+    return a*wa + b*wb + c*wc;
 }
 
 // Small bloom.
 vec3 Bloom(vec2 pos)
 {
-	vec3 a = Horz5(pos,-2.0);
-	vec3 b = Horz7(pos,-1.0);
-	vec3 c = Horz7(pos, 0.0);
-	vec3 d = Horz7(pos, 1.0);
-	vec3 e = Horz5(pos, 2.0);
+    vec3 a = Horz5(pos,-2.0);
+    vec3 b = Horz7(pos,-1.0);
+    vec3 c = Horz7(pos, 0.0);
+    vec3 d = Horz7(pos, 1.0);
+    vec3 e = Horz5(pos, 2.0);
 
-	float wa = BloomScan(pos,-2.0);
-	float wb = BloomScan(pos,-1.0);
-	float wc = BloomScan(pos, 0.0);
-	float wd = BloomScan(pos, 1.0);
-	float we = BloomScan(pos, 2.0);
+    float wa = BloomScan(pos,-2.0);
+    float wb = BloomScan(pos,-1.0);
+    float wc = BloomScan(pos, 0.0);
+    float wd = BloomScan(pos, 1.0);
+    float we = BloomScan(pos, 2.0);
 
-	return a*wa+b*wb+c*wc+d*wd+e*we;
+    return a*wa+b*wb+c*wc+d*wd+e*we;
 }
 
 // Distortion of scanlines, and end of screen alpha.
 vec2 Warp(vec2 pos)
 {
-	pos  = pos*2.0-1.0;
-	pos *= vec2(1.0 + (pos.y*pos.y)*warpX, 1.0 + (pos.x*pos.x)*warpY);
+    pos  = pos*2.0-1.0;
+    pos *= vec2(1.0 + (pos.y*pos.y)*warpX, 1.0 + (pos.x*pos.x)*warpY);
 
-	return pos*0.5 + 0.5;
+    return pos*0.5 + 0.5;
 }
 
 // Shadow mask.
 vec3 Mask(vec2 pos)
 {
-	vec3 mask = vec3(maskDark, maskDark, maskDark);
+    vec3 mask = vec3(maskDark, maskDark, maskDark);
 
-	// Very compressed TV style shadow mask.
-	if (shadowMask == 1.0)
-	{
-		float line = maskLight;
-		float odd = 0.0;
+    // Very compressed TV style shadow mask.
+    if (shadowMask == 1.0)
+    {
+        float line = maskLight;
+        float odd = 0.0;
 
-		if (fract(pos.x*0.166666666) < 0.5) odd = 1.0;
-		if (fract((pos.y + odd) * 0.5) < 0.5) line = maskDark;
+        if (fract(pos.x*0.166666666) < 0.5) odd = 1.0;
+        if (fract((pos.y + odd) * 0.5) < 0.5) line = maskDark;
 
-		pos.x = fract(pos.x*0.333333333);
+        pos.x = fract(pos.x*0.333333333);
 
-		if      (pos.x < 0.333) mask.r = maskLight;
-		else if (pos.x < 0.666) mask.g = maskLight;
-		else                    mask.b = maskLight;
-		mask*=line;
-	}
+        if      (pos.x < 0.333) mask.r = maskLight;
+        else if (pos.x < 0.666) mask.g = maskLight;
+        else                    mask.b = maskLight;
+        mask*=line;
+    }
 
-	// Aperture-grille.
-	else if (shadowMask == 2.0)
-	{
-		pos.x = fract(pos.x*0.333333333);
+    // Aperture-grille.
+    else if (shadowMask == 2.0)
+    {
+        pos.x = fract(pos.x*0.333333333);
 
-		if      (pos.x < 0.333) mask.r = maskLight;
-		else if (pos.x < 0.666) mask.g = maskLight;
-		else                    mask.b = maskLight;
-	}
+        if      (pos.x < 0.333) mask.r = maskLight;
+        else if (pos.x < 0.666) mask.g = maskLight;
+        else                    mask.b = maskLight;
+    }
 
-	// Stretched VGA style shadow mask (same as prior shaders).
-	else if (shadowMask == 3.0)
-	{
-		pos.x += pos.y*3.0;
-		pos.x  = fract(pos.x*0.166666666);
+    // Stretched VGA style shadow mask (same as prior shaders).
+    else if (shadowMask == 3.0)
+    {
+        pos.x += pos.y*3.0;
+        pos.x  = fract(pos.x*0.166666666);
 
-		if      (pos.x < 0.333) mask.r = maskLight;
-		else if (pos.x < 0.666) mask.g = maskLight;
-		else                    mask.b = maskLight;
-	}
+        if      (pos.x < 0.333) mask.r = maskLight;
+        else if (pos.x < 0.666) mask.g = maskLight;
+        else                    mask.b = maskLight;
+    }
 
-	// VGA style shadow mask.
-	else if (shadowMask == 4.0)
-	{
-		pos.xy  = floor(pos.xy*vec2(1.0, 0.5));
-		pos.x  += pos.y*3.0;
-		pos.x   = fract(pos.x*0.166666666);
+    // VGA style shadow mask.
+    else if (shadowMask == 4.0)
+    {
+        pos.xy  = floor(pos.xy*vec2(1.0, 0.5));
+        pos.x  += pos.y*3.0;
+        pos.x   = fract(pos.x*0.166666666);
 
-		if      (pos.x < 0.333) mask.r = maskLight;
-		else if (pos.x < 0.666) mask.g = maskLight;
-		else                    mask.b = maskLight;
-	}
+        if      (pos.x < 0.333) mask.r = maskLight;
+        else if (pos.x < 0.666) mask.g = maskLight;
+        else                    mask.b = maskLight;
+    }
 
-	return mask;
+    return mask;
 }
 
 void main()
 {
-	vec2 pos = Warp(v_texCoord.xy*(rubyTextureSize.xy/rubyInputSize.xy))*(rubyInputSize.xy/rubyTextureSize.xy);
-	vec3 outColor = Tri(pos);
+    vec2 pos = Warp(v_texCoord);
+    vec3 outColor = Tri(pos);
 
 #ifdef DO_BLOOM
-	//Add Bloom
-	outColor.rgb += Bloom(pos)*bloomAmount;
+    //Add Bloom
+    outColor.rgb += Bloom(pos)*bloomAmount;
 #endif
 
-	if (shadowMask > 0.0)
-		outColor.rgb *= Mask(gl_FragCoord.xy * 1.000001);
+    if (shadowMask > 0.0)
+        outColor.rgb *= Mask(gl_FragCoord.xy * 1.000001);
 
-#ifdef GL_ES    /* TODO/FIXME - hacky clamp fix */
-	vec2 bordertest = (pos);
-	if ( bordertest.x > 0.0001 && bordertest.x < 0.9999 && bordertest.y > 0.0001 && bordertest.y < 0.9999)
-		outColor.rgb = outColor.rgb;
-	else
-		outColor.rgb = vec3(0.0);
-#endif
-	FragColor = vec4(outColor.rgb, 1.0);
+    // linear => sRGB; see the note at the top of the file
+    FragColor = vec4(pow(outColor.rgb, vec3(1.0 / 2.2)), 1.0);
 }
+
 #endif
