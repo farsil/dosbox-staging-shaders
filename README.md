@@ -1,10 +1,10 @@
 # DOSBox Staging Shaders
 
-A collection of shaders to be used with DOSBox staging.
+A collection of shaders to be used with DOSBox Staging.
 
 ## How to use
 
-Download the source code of the release that matches your DOSBox staging version,
+Download the source code of the release that matches your DOSBox Staging version,
 extract the content of the archive so that the glsl files land in the `shaders` folder
 (`glshaders` for DOSBox Staging 0.82).
 
