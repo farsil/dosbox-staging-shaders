@@ -103,6 +103,9 @@ uniform float monitor_gamma;
 vec4 scanline(vec2 coord, vec4 frame)
 {
 #if defined SCANLINES
+    // 0.83 flips the texture Y axis, so measure Y from the far end to keep
+    // the original light/dark line order.
+    coord.y = 1.0 - coord.y;
     vec2 omega = vec2(3.1415 * OUTPUT_SIZE.x, 2.0 * 3.1415 * INPUT_SIZE_0.y);
     vec2 sine_comp = vec2(SCANLINE_SINE_COMP_A, SCANLINE_SINE_COMP_B);
     vec3 res = frame.xyz;

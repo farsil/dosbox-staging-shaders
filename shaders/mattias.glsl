@@ -138,7 +138,9 @@ void main()
     col *= vec3(0.95,1.05,0.95);
     col = mix( col, col * col, 0.3) * 3.8;
 
-    float scans = clamp( 0.35+0.15*sin(3.5*(iTime * SCANSPEED)+uv.y*iResolution.y*1.5), 0.0, 1.0);
+    // 0.83 flips the texture Y axis, so measure Y from the far end to keep
+    // the original light/dark line order.
+    float scans = clamp( 0.35+0.15*sin(3.5*(iTime * SCANSPEED)+(1.0-uv.y)*iResolution.y*1.5), 0.0, 1.0);
 
     float s = pow(scans,0.9);
     col = col*vec3( s) ;

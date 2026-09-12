@@ -90,7 +90,9 @@ void main()
     colour *= mix(0.4, 1.0, lum);
 
     float SCANAMOUNT = mix(HIGHSCANAMOUNT1, HIGHSCANAMOUNT2, lum);
-    float scanLine = SCANAMOUNT * sin(2.0*PI*pos.y * INPUT_SIZE_0.y);
+    // 0.83 flips the texture Y axis, so measure Y from the far end to keep
+    // the original light/dark line order.
+    float scanLine = SCANAMOUNT * sin(2.0*PI*(1.0 - pos.y) * INPUT_SIZE_0.y);
 
     float whichmask = fract(gl_FragCoord.x*-0.4999);
     float mask = 1.0 + float(whichmask < 0.5) * -MASK_DARK;
