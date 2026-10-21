@@ -1,6 +1,7 @@
 # DOSBox Staging Shaders
 
-A collection of shaders to be used with DOSBox Staging.
+A collection of shaders to be used with DOSBox Staging. They are updated versions of
+the shaders found in the [dosbox-shaders](https://github.com/dosbox-staging/dosbox-shaders) repo.
 
 ## How to use
 
